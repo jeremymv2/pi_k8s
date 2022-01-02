@@ -51,7 +51,7 @@ cat <<EOF | sudo tee /etc/docker/daemon.json # https://kubernetes.io/docs/setup/
 EOF
 ```
 
-## Bootstrat with `kubeadm`
+## Bootstrap with `kubeadm`
 
 ```bash
 kubeadm init phase certs all --control-plane-endpoint cluster-endpoint
