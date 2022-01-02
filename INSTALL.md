@@ -5,10 +5,7 @@
 Below are some of the important parts. I ran these with tmux syncrhonized panes.
 
 ```bash
-apt install ntp
-apt install docker.io
-apt install containerd
-apt install sysstat
+apt install ntp docker.io containerd sysstat etcd-client
 systemctl enable ntp
 sudo apt-get install net-tools
 sudo swapoff -a
