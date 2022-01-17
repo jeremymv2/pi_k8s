@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   namespace: metallb-system
   name: config
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 data:
   config: |
     address-pools:

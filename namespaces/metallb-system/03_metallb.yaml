@@ -4,6 +4,8 @@ metadata:
   labels:
     app: metallb
   name: controller
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 spec:
   allowPrivilegeEscalation: false
@@ -46,6 +48,8 @@ metadata:
   labels:
     app: metallb
   name: speaker
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 spec:
   allowPrivilegeEscalation: false
@@ -86,6 +90,8 @@ metadata:
     app: metallb
   name: controller
   namespace: metallb-system
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -93,6 +99,8 @@ metadata:
   labels:
     app: metallb
   name: speaker
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -101,6 +109,8 @@ metadata:
   labels:
     app: metallb
   name: metallb-system:controller
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 rules:
 - apiGroups:
   - ''
@@ -138,6 +148,8 @@ metadata:
   labels:
     app: metallb
   name: metallb-system:speaker
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 rules:
 - apiGroups:
   - ''
@@ -178,6 +190,8 @@ metadata:
   labels:
     app: metallb
   name: config-watcher
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 rules:
 - apiGroups:
@@ -195,6 +209,8 @@ metadata:
   labels:
     app: metallb
   name: pod-lister
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 rules:
 - apiGroups:
@@ -210,6 +226,8 @@ metadata:
   labels:
     app: metallb
   name: controller
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 rules:
 - apiGroups:
@@ -241,6 +259,8 @@ metadata:
   labels:
     app: metallb
   name: metallb-system:controller
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -256,6 +276,8 @@ metadata:
   labels:
     app: metallb
   name: metallb-system:speaker
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -271,6 +293,8 @@ metadata:
   labels:
     app: metallb
   name: config-watcher
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -288,6 +312,8 @@ metadata:
   labels:
     app: metallb
   name: pod-lister
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -304,6 +330,8 @@ metadata:
     app: metallb
   name: controller
   namespace: metallb-system
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -319,6 +347,8 @@ metadata:
     app: metallb
     component: speaker
   name: speaker
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
   namespace: metallb-system
 spec:
   selector:
@@ -400,6 +430,8 @@ metadata:
     component: controller
   name: controller
   namespace: metallb-system
+  annotations:
+    commit_sha: ${GITHUB_SHA_URL}
 spec:
   revisionHistoryLimit: 3
   selector:
