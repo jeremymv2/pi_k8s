@@ -5,6 +5,7 @@ CONTROLLER03 ?= pi4-3
 
 export KUBE_CONTEXT CONTROLLER01 CONTROLLER02 CONTROLLER03
 
+METALLB = .metallb_installed
 MONITORING = .monitoring_installed
 
 init:
@@ -27,9 +28,14 @@ destroy:
 	ssh $(CONTROLLER0) kubeadm reset
 .PHONY: destroy
 
+$(METALLB):
+	pushd namespaces/metallb-system && \
+		$(MAKE) apply && popd
+	touch $(METALLB)
+
 $(MONITORING):
 	pushd namespaces/monitoring/prometheus && \
 		$(MAKE) apply && popd
 	touch $(MONITORING)
 
-launch: $(MONITORING)
+launch: $(METALLB) $(MONITORING)
