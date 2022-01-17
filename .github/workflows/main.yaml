@@ -1,0 +1,38 @@
+name: BumpActions
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+    - 'installed/**'
+    - 'namespaces/**'
+    - '!CHANGELOG.md'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  bump:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out repository under $GITHUB_WORKSPACE, so the job can access it
+    - uses: actions/checkout@v2
+
+    - name: "Changelog and Version Bump Action"
+      # https://github.com/TriPSs/conventional-changelog-action
+      uses: TriPSs/conventional-changelog-action@v3
+      with:
+        git-message: "chore(release): {version}"
+        git-user-email: changelog_bump@github.actions.com
+        git-user-name: "ChangelogVersionBump"
+        github-token: "${{ secrets.TOKEN }}"
+        output-file: ./CHANGELOG.md
+        release-count: "50"
+        skip-commit: "false"
+        skip-on-empty: "false"
+        skip-version-file: "false"
+        tag-prefix: ""
+        version-file: ./version.json
