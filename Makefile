@@ -6,6 +6,7 @@ this_path := $(abspath $(firstword $(MAKEFILE_LIST)))
 this_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 METALLB = $(this_dir)installed/metallb
 MONITORING = $(this_dir)installed/prometheus
+LOGGING = $(this_dir)installed/fluentbit
 
 export KUBE_CONTEXT
 
@@ -39,4 +40,9 @@ $(MONITORING):
 		$(MAKE) apply && popd
 	@touch $(MONITORING)
 
-launch: $(METALLB) $(MONITORING)
+$(LOGGING):
+	@pushd namespaces/logging/fluent-bit && \
+		$(MAKE) apply && popd
+	@touch $(LOGGING)
+
+launch: $(METALLB) $(MONITORING) $(LOGGING)

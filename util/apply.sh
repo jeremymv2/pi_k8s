@@ -12,4 +12,4 @@ export COMMIT_SHA GITHUB_SHA_URL
 COMMIT_SHA="$(git log -n 1 --all --pretty=format:%H -- "$1")"
 GITHUB_SHA_URL="https://github.com/$(repo_owner_project)/commit/$COMMIT_SHA"
 
-envsubst < "$1" | kubectl apply -n "$NAMESPACE" --context "$KUBE_CONTEXT" -f -
+envsubst < "$1" | kubectl apply $EXTRA_OPTS -n "$NAMESPACE" --context "$KUBE_CONTEXT" -f -
