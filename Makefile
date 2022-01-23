@@ -25,25 +25,41 @@ init:
 		--cri-socket=/run/containerd/containerd.sock \
 		--kubernetes-version v1.23.1 \
 		--upload-certs
-.PHONY: init
 
 destroy:
 	@ssh $(CONTROLLER0) kubeadm reset
-.PHONY: destroy
+
+metallb: $(METALLB)
+
+metallb-uninstall:
+	@pushd namespaces/metallb-system && \
+		$(MAKE) uninstall && popd
 
 $(METALLB):
 	@pushd namespaces/metallb-system && \
 		$(MAKE) apply && popd
 	@touch $(METALLB)
 
+monitoring: $(MONITORING)
+
+monitoring-uninstall:
+	@pushd namespaces/monitoring/prometheus && \
+		$(MAKE) uninstall && popd
+
 $(MONITORING):
 	@pushd namespaces/monitoring/prometheus && \
 		$(MAKE) apply && popd
 	@touch $(MONITORING)
+
+logging: $(LOGGING)
+
+logging-uninstall:
+	@pushd namespaces/logging/fluent-bit && \
+		$(MAKE) uninstall && popd
 
 $(LOGGING):
 	@pushd namespaces/logging/fluent-bit && \
 		$(MAKE) apply && popd
 	@touch $(LOGGING)
 
-launch: $(FLANNEL) $(METALLB) $(MONITORING) $(LOGGING)
+launch: flannel metallb monitoring logging
