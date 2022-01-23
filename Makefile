@@ -7,6 +7,7 @@ this_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 METALLB = $(this_dir)installed/metallb
 MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
+FLANNEL = $(this_dir)installed/flannel
 
 export KUBE_CONTEXT
 
@@ -18,8 +19,8 @@ init:
 		-v 4 \
 		--kubernetes-version v1.23.1
 	@ssh $(CONTROLLER0) kubeadm init \
-		--service-cidr=10.1.0.0/16 \
-		--pod-network-cidr=10.2.0.0/16 \
+		--service-cidr=10.96.0.0/16 \
+		--pod-network-cidr=10.244.0.0/16 \
 		--control-plane-endpoint=cluster-endpoint:6443 \
 		--cri-socket=/run/containerd/containerd.sock \
 		--kubernetes-version v1.23.1 \
@@ -45,4 +46,4 @@ $(LOGGING):
 		$(MAKE) apply && popd
 	@touch $(LOGGING)
 
-launch: $(METALLB) $(MONITORING) $(LOGGING)
+launch: $(FLANNEL) $(METALLB) $(MONITORING) $(LOGGING)
