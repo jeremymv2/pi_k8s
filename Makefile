@@ -4,6 +4,7 @@ CONTROLLER02 = pi4-2
 CONTROLLER03 = pi4-3
 this_path := $(abspath $(firstword $(MAKEFILE_LIST)))
 this_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
+INIT = $(this_dir)installed/init
 METALLB = $(this_dir)installed/metallb
 MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
@@ -11,7 +12,7 @@ FLANNEL = $(this_dir)installed/flannel
 
 export KUBE_CONTEXT
 
-init:
+init: $(INIT)
 	@ssh $(CONTROLLER0) kubeadm init phase certs all \
 		--control-plane-endpoint cluster-endpoint
 	@ssh $(CONTROLLER0) kubeadm config images pull \
@@ -25,6 +26,9 @@ init:
 		--cri-socket=/run/containerd/containerd.sock \
 		--kubernetes-version v1.23.1 \
 		--upload-certs
+	@touch $(INIT)
+
+system-critical: init flannel metallb monitoring logging
 
 destroy:
 	@ssh $(CONTROLLER0) kubeadm reset
@@ -62,4 +66,3 @@ $(LOGGING):
 		$(MAKE) apply && popd
 	@touch $(LOGGING)
 
-launch: flannel metallb monitoring logging
