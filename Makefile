@@ -1,5 +1,7 @@
 K8S_VERSION = v1.23.1
-KUBE_CONTEXT ?= kubernetes-admin@kubernetes
+K8S_SERVICE_CIDR = 172.16.100.0/23
+K8S_POD_NET_CIDR = 172.16.200.0/20 # 4094 PODs
+CALICO_BLOCKSIZE = /22 # 4 workers with 1022 PODs each
 CONTROLLER0 = pi4-1
 CONTROLLER1 = pi4-2
 CONTROLLER2 = pi4-3
@@ -30,15 +32,16 @@ $(INIT):
 		--v=5 \
 		--apiserver-bind-port=6443 \
 		--cert-dir=/etc/kubernetes/pki \
-		--service-cidr=10.96.0.0/16 \
-		--pod-network-cidr=10.244.0.0/16 \
+		--service-cidr=$(K8S_SERVICE_CIDR) \
+		--pod-network-cidr=$(K8S_POD_NET_CIDR) \
 		--control-plane-endpoint=cluster-endpoint:6443 \
 		--cri-socket=/run/containerd/containerd.sock \
 		--kubernetes-version=$(K8S_VERSION) \
 		--upload-certs
-	@echo "Pausing a moment for node to be ready.."
-	@sleep 15
-	@ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes
+	@ssh $(CONTROLLER0) "until sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes 2>/dev/null ; \
+		do sleep 5 ; \
+		  echo 'Waiting for successful reponse from the K8S API..' ; \
+		done"
 	@echo "-------------------------------"
 	@echo " $(CONTROLLER0) INITIALIZED! "
 	@echo "-------------------------------"
@@ -54,9 +57,8 @@ $(INIT):
 		echo " ADDING ROLES ON $$node" ; \
 		echo "-----------------------------" ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
-			label node $$node node-role.kubernetes.io/control-plane=control-plane ; \
-		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
-			label node $$node node-role.kubernetes.io/master=master ; \
+			label node $$node node-role.kubernetes.io/control-plane=control-plane \
+			node-role.kubernetes.io/master=master ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes ; \
 	done
 	@touch $(INIT)
