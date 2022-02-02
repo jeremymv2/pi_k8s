@@ -1,0 +1,58 @@
+# https://kubernetes.io/docs/reference/config-api/kubeadm-config.v1beta3/
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: "${CLUSTER_NAME}"
+kubernetesVersion: ${K8S_VERSION}
+controlPlaneEndpoint: "${CONTROL_PLANE_API}"
+apiServer:
+  certSANs:
+    - 10.250.0.1
+    - localhost
+    - controller0
+    - controller1
+    - controller2
+    - 172.16.0.246
+    - 172.16.0.247
+    - 172.16.0.103
+    - "pi4-1"
+    - "pi4-2"
+    - "pi4-3"
+etcd:
+   local:
+    imageRepository: "k8s.gcr.io"
+    serverCertSANs:
+      - 10.250.0.1
+      - localhost
+      - controller0
+      - controller1
+      - controller2
+      - 172.16.0.246
+      - 172.16.0.247
+      - 172.16.0.103
+      - "pi4-1"
+      - "pi4-2"
+      - "pi4-3"
+    peerCertSANs:
+      - 10.250.0.1
+      - localhost
+      - controller0
+      - controller1
+      - controller2
+      - 172.16.0.246
+      - 172.16.0.247
+      - 172.16.0.103
+      - "pi4-1"
+      - "pi4-2"
+      - "pi4-3"
+networking:
+  serviceSubnet: ${K8S_SERVICE_CIDR}
+  podSubnet: ${K8S_POD_NET_CIDR}
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+nodeRegistration:
+  criSocket: ${CRI_SOCKET}
+bootstrapTokens:
+- token: "9a08jv.c0izixklcxtmnze7"
+  description: "kubeadm bootstrap token"
+  ttl: "1h"

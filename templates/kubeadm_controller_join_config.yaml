@@ -1,0 +1,24 @@
+# https://kubernetes.io/docs/reference/config-api/kubeadm-config.v1beta3/
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: "${CLUSTER_NAME}"
+kubernetesVersion: ${K8S_VERSION}
+controlPlaneEndpoint: "${CONTROL_PLANE_API}"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+nodeRegistration:
+  criSocket: ${CRI_SOCKET}
+  taints:
+  - key: "kubeadmNode"
+    value: "master"
+    effect: "NoSchedule"
+discovery:
+  bootstrapToken:
+    token: "9a08jv.c0izixklcxtmnze7"
+    apiServerEndpoint: "${CONTROL_PLANE_API}"
+    unsafeSkipCAVerification: true
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: ${ADVERTISE_IP}
+    bindPort: 6443

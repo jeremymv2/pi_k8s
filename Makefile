@@ -1,13 +1,20 @@
 K8S_VERSION = v1.23.1
-K8S_SERVICE_CIDR = 172.16.100.0/23
-K8S_POD_NET_CIDR = 172.16.200.0/20 # 4094 PODs
-CALICO_BLOCKSIZE = /22 # 4 workers with 1022 PODs each
-CONTROLLER0 = pi4-1
-CONTROLLER1 = pi4-2
-CONTROLLER2 = pi4-3
-WORKER0 = pi4-0
-WORKER1 = pi3-0
-WORKER2 = pi3-1
+CONTROL_PLANE_API = cluster-endpoint:6443
+CLUSTER_NAME = pi-k8s
+CRI_SOCKET = unix:///run/containerd/containerd.sock
+LOG_LEVEL = 6
+K8S_SERVICE_CIDR = 10.250.0.0/16
+K8S_POD_NET_CIDR = 10.251.0.0/16 # 65,536 PODs
+CALICO_BLOCKSIZE = 22 # 65 workers with 1024 PODs each
+# hostnames
+CONTROLLER0 = controller0
+CONTROLLER1 = controller1
+CONTROLLER2 = controller2
+WORKER0 = worker0
+WORKER1 = worker1
+WORKER2 = worker2
+CONTROLLER1_ADVERTISE_IP = 172.16.0.246
+CONTROLLER2_ADVERTISE_IP = 172.16.0.103
 ALL_WORKERS = $(WORKER2) $(WORKER1) $(WORKER0)
 ALL_CONTROLLERS = $(CONTROLLER2) $(CONTROLLER1) $(CONTROLLER0)
 this_path := $(abspath $(firstword $(MAKEFILE_LIST)))
@@ -17,51 +24,74 @@ METALLB = $(this_dir)installed/metallb
 MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
 FLANNEL = $(this_dir)installed/flannel
+TMP_CONFIG := $(shell mktemp /tmp/abc-script.XXXXXX)
+export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_CIDR CRI_SOCKET \
+  KUBE_CONTEXT
 
-export KUBE_CONTEXT
+# save for later
+#ssh $$node sudo $$(ssh $(CONTROLLER0) sudo kubeadm token create \
 
 initialize: $(INIT)
 
 $(INIT):
-	@ssh $(CONTROLLER0) sudo systemctl restart containerd
-	@ssh $(CONTROLLER0) sudo kubeadm init phase certs all \
-		--v=5 \
-		--control-plane-endpoint=cluster-endpoint:6443 \
-		--kubernetes-version=$(K8S_VERSION)
-	@ssh $(CONTROLLER0) sudo kubeadm init \
-		--v=5 \
-		--apiserver-bind-port=6443 \
-		--cert-dir=/etc/kubernetes/pki \
-		--service-cidr=$(K8S_SERVICE_CIDR) \
-		--pod-network-cidr=$(K8S_POD_NET_CIDR) \
-		--control-plane-endpoint=cluster-endpoint:6443 \
-		--cri-socket=/run/containerd/containerd.sock \
-		--kubernetes-version=$(K8S_VERSION) \
+	@echo "-------------------------------"
+	@echo " INITIALIZING $(CONTROLLER0)"
+	@echo "-------------------------------"
+	ssh $(CONTROLLER0) sudo systemctl restart containerd
+	ssh $(CONTROLLER0) sudo rm -rf /etc/kubernetes
+	ssh $(CONTROLLER0) sudo mkdir /etc/kubernetes
+	envsubst < ./templates/kubeadm_init_config.yaml > $(TMP_CONFIG)
+	scp $(TMP_CONFIG) root@$(CONTROLLER0):/etc/kubernetes/kubeadm_config.yaml
+	ssh $(CONTROLLER0) sudo kubeadm init phase certs all \
+		--v=$(LOG_LEVEL) \
+		--config=/etc/kubernetes/kubeadm_config.yaml
+	ssh $(CONTROLLER0) sudo kubeadm init \
+		--skip-phases certs \
+		--v=$(LOG_LEVEL) \
+		--config=/etc/kubernetes/kubeadm_config.yaml \
 		--upload-certs
-	@ssh $(CONTROLLER0) "until sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes 2>/dev/null ; \
+	ssh $(CONTROLLER0) "until sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide 2>/dev/null ; \
 		do sleep 5 ; \
 		  echo 'Waiting for successful reponse from the K8S API..' ; \
 		done"
-	@echo "-------------------------------"
-	@echo " $(CONTROLLER0) INITIALIZED! "
-	@echo "-------------------------------"
-	@for node in $(CONTROLLER1) $(CONTROLLER2); do \
-		echo "-----------------------------" ; \
-		echo " JOINING K8S ON $$node" ; \
-		echo "-----------------------------" ; \
+	for node in $(CONTROLLER1_ADVERTISE_IP) $(CONTROLLER2_ADVERTISE_IP); do \
+		echo "---------------------------------------" ; \
+		echo " JOINING $$node TO CONTROL PLANE" ; \
+		echo "---------------------------------------" ; \
 		ssh $$node sudo systemctl restart containerd ; \
-		ssh $$node sudo $$(ssh $(CONTROLLER0) sudo kubeadm token create --print-join-command) ; \
+		ssh $$node sudo rm -rf /etc/kubernetes ; \
+		ssh $$node sudo mkdir /etc/kubernetes ; \
+		export ADVERTISE_IP=$$node ; \
+		envsubst < ./templates/kubeadm_controller_join_config.yaml > $(TMP_CONFIG) ; \
+		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
+		ssh $$node sudo systemctl restart containerd ; \
+		scp -r root@$(CONTROLLER0):/etc/kubernetes/pki root@$$node:/etc/kubernetes/ ; \
+		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
+		  --v=$(LOG_LEVEL) \
+		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
+		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
-	@for node in controller1 controller2; do \
-		echo "-----------------------------" ; \
-		echo " ADDING ROLES ON $$node" ; \
-		echo "-----------------------------" ; \
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
+	./util/etcd/etcdstatus.sh
+	for node in $(ALL_WORKERS); do \
+		echo "---------------------------------------" ; \
+		echo " JOINING WORKER $$node" ; \
+		echo "---------------------------------------" ; \
+		ssh $$node sudo systemctl restart containerd ; \
+		ssh $$node sudo rm -rf /etc/kubernetes ; \
+		ssh $$node sudo mkdir /etc/kubernetes ; \
+		envsubst < ./templates/kubeadm_worker_join_config.yaml > $(TMP_CONFIG) ; \
+		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
+		ssh $$node sudo systemctl restart containerd ; \
+		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
+		  --v=$(LOG_LEVEL) \
+		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
-			label node $$node node-role.kubernetes.io/control-plane=control-plane \
-			node-role.kubernetes.io/master=master ; \
-		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes ; \
+			label node $$node node-role.kubernetes.io/worker=worker ; \
+		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
-	@touch $(INIT)
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
+	touch $(INIT)
 
 generate-kubeconfig:
 	@ssh $(CONTROLLER0) "mkdir -p \$HOME/.kube && \
@@ -70,22 +100,21 @@ generate-kubeconfig:
 
 system-critical: initialize flannel metallb monitoring logging
 
-#@for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
+# ssh $$node sudo ipvsadm --clear ; \
 
 destroy:
-	@for node in $(ALL_CONTROLLERS); do \
+	@for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "-----------------------------" ; \
 		echo " DESTROYING K8S ON $$node" ; \
 		echo "-----------------------------" ; \
 		ssh $$node sudo kubeadm reset \
-			--cri-socket=/var/run/containerd/containerd.sock \
+			--cri-socket=unix:///run/containerd/containerd.sock \
 			--force \
 			--v=5 \
 			--kubeconfig ~ubuntu/.kube/config ; \
 		ssh $$node sudo rm -rf /var/run/containerd /etc/cni/net.d/* ; \
-		ssh $$node sudo crictl --runtime-endpoint /run/containerd/containerd.sock ps || true ; \
+		ssh $$node sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps || true ; \
 		ssh $$node sudo iptables -F ; \
-		ssh $$node sudo ipvsadm --clear ; \
 	done
 	@rm -f $(INIT)
 

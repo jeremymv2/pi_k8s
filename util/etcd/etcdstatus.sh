@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 TARGET=${1:-controller0}
-
-. endpoints.sh
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+. ${SCRIPT_DIR}/endpoints.sh
 
 ssh root@"${TARGET}" "${ETCDCTL}" --write-out=table \
 	--endpoints="${ENDPOINTS}" \
