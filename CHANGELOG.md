@@ -1,3 +1,7 @@
+## [0.1.6](https://github.com/jeremymv2/pi_k8s/compare/0.1.5...0.1.6) (2022-02-06)
+
+
+
 ## [0.1.5](https://github.com/jeremymv2/pi_k8s/compare/0.1.4...0.1.5) (2022-02-02)
 
 
