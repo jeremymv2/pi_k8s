@@ -1,0 +1,11 @@
+apiVersion: projectcalico.org/v3
+kind: IPPool
+metadata:
+  name: pool1
+spec:
+  blockSize: ${CALICO_BLOCKSIZE}
+  cidr: ${K8S_POD_NET_CIDR}
+  natOutgoing: true
+  ipipMode: Always
+  vxlanMode: Never
+  nodeSelector: all()

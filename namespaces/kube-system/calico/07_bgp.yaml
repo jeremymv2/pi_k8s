@@ -1,0 +1,26 @@
+apiVersion: projectcalico.org/v3
+kind: BGPConfiguration
+metadata:
+  name: default
+spec:
+  asNumber: 65503
+  logSeverityScreen: Debug
+  nodeToNodeMeshEnabled: false
+  serviceClusterIPs:
+  - cidr: ${K8S_SERVICE_CIDR}
+---
+apiVersion: projectcalico.org/v3
+kind: BGPPeer
+metadata:
+  name: peer-to-rrs
+spec:
+  nodeSelector: !has(is-route-reflector)
+  peerSelector: has(is-route-reflector)
+---
+kind: BGPPeer
+apiVersion: projectcalico.org/v3
+metadata:
+  name: rr-mesh
+spec:
+  nodeSelector: has(is-route-reflector)
+  peerSelector: has(is-route-reflector)

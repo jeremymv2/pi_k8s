@@ -9,10 +9,6 @@ apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
 nodeRegistration:
   criSocket: ${CRI_SOCKET}
-  taints:
-  - key: "kubeadmNode"
-    value: "master"
-    effect: "NoSchedule"
 discovery:
   bootstrapToken:
     token: "9a08jv.c0izixklcxtmnze7"

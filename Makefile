@@ -1,3 +1,4 @@
+KUBE_CONTEXT = kubernetes-admin@pi-k8s
 K8S_VERSION = v1.23.1
 CONTROL_PLANE_API = cluster-endpoint:6443
 CLUSTER_NAME = pi-k8s
@@ -26,7 +27,7 @@ LOGGING = $(this_dir)installed/fluentbit
 FLANNEL = $(this_dir)installed/flannel
 TMP_CONFIG := $(shell mktemp /tmp/abc-script.XXXXXX)
 export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_CIDR CRI_SOCKET \
-  KUBE_CONTEXT
+  KUBE_CONTEXT CALICO_BLOCKSIZE ALL_WORKERS ALL_CONTROLLERS CONTROLLER0 K8S_SERVICE_CIDR
 
 # save for later
 #ssh $$node sudo $$(ssh $(CONTROLLER0) sudo kubeadm token create \
@@ -103,7 +104,7 @@ system-critical: initialize flannel metallb monitoring logging
 # ssh $$node sudo ipvsadm --clear ; \
 
 destroy:
-	@for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
+	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "-----------------------------" ; \
 		echo " DESTROYING K8S ON $$node" ; \
 		echo "-----------------------------" ; \
@@ -112,11 +113,16 @@ destroy:
 			--force \
 			--v=5 \
 			--kubeconfig ~ubuntu/.kube/config ; \
-		ssh $$node sudo rm -rf /var/run/containerd /etc/cni/net.d/* ; \
+		ssh $$node sudo rm -rf /var/run/containerd ; \
+		ssh $$node sudo rm -rf /etc/cni/net.d ; \
+		ssh $$node sudo ipvsadm --clear ; \
 		ssh $$node sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps || true ; \
 		ssh $$node sudo iptables -F ; \
 	done
-	@rm -f $(INIT)
+	rm -f $(INIT)
+
+kubeconfig:
+	@ssh $(CONTROLLER0) sudo cat /etc/kubernetes/admin.conf
 
 metallb: $(METALLB)
 
