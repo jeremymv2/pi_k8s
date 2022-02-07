@@ -17,10 +17,19 @@ spec:
   nodeSelector: !has(is-route-reflector)
   peerSelector: has(is-route-reflector)
 ---
-kind: BGPPeer
 apiVersion: projectcalico.org/v3
+kind: BGPPeer
 metadata:
   name: rr-mesh
 spec:
   nodeSelector: has(is-route-reflector)
   peerSelector: has(is-route-reflector)
+---
+apiVersion: projectcalico.org/v3
+kind: BGPPeer
+metadata:
+  name: bgppeerext
+spec:
+  peerIP: 172.16.0.1
+  asNumber: 65503
+  nodeSelector: has(is-route-reflector)
