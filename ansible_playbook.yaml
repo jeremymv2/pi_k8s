@@ -1,0 +1,14 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: install pre-reqs
+      apt:
+        name:
+          - ntp
+          - docker.io
+          - containerd
+          - sysstat
+          - etcd-client
+        state: latest
+        update_cache: true
