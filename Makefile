@@ -32,6 +32,9 @@ export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_C
 # save for later
 #ssh $$node sudo $$(ssh $(CONTROLLER0) sudo kubeadm token create \
 
+ansible:
+	ansible-playbook ansible-playbook.yaml
+
 initialize: $(INIT)
 
 $(INIT):
@@ -55,6 +58,8 @@ $(INIT):
 		do sleep 5 ; \
 		  echo 'Waiting for successful reponse from the K8S API..' ; \
 		done"
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
+		label node $(CONTROLLER0) kubernetes.io/role=master
 	for node in $(CONTROLLER1_ADVERTISE_IP) $(CONTROLLER2_ADVERTISE_IP); do \
 		echo "---------------------------------------" ; \
 		echo " JOINING $$node TO CONTROL PLANE" ; \
@@ -70,6 +75,8 @@ $(INIT):
 		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
 		  --v=$(LOG_LEVEL) \
 		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
+		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
+			label node $$node kubernetes.io/role=master ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide

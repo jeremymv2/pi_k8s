@@ -10,5 +10,6 @@
           - containerd
           - sysstat
           - etcd-client
+          - nfs-common
         state: latest
         update_cache: true
