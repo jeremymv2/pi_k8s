@@ -16,6 +16,7 @@ SNAPSHOT_CONFIG_REGION := us-east-1
 SNAPSHOTS_ENABLED := true
 DEPLOY_RESTIC := true
 UPGRADE_CRDS := false
+DEFAULT_RESTIC_FOR_ALL := true
 CREDENTIALS_FILE_PATH := /home/jmiller/.aws/credentials
 VELERO_CLIENT = velero-client/velero
 
@@ -46,6 +47,7 @@ install: setup
 		--version $(CHART_VERSION) \
 		--create-namespace \
 		--set-file credentials.secretContents.cloud=$(CREDENTIALS_FILE_PATH) \
+		--set defaultVolumesToRestic=$(DEFAULT_RESTIC_FOR_ALL) \
 		--set upgradeCRDs=$(UPGRADE_CRDS) \
 		--set deployRestic=$(DEPLOY_RESTIC) \
 		--set snapshotsEnabled=$(SNAPSHOTS_ENABLED) \
