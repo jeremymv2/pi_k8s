@@ -34,6 +34,7 @@ install: setup
 		--values default_values.yaml > $(RELEASE_NAME).yaml
 	kubectl create ns $(NAMESPACE) --context $(K8S_CONTEXT) || true
 	kubectl apply -f $(RELEASE_NAME).yaml --context $(K8S_CONTEXT)
+	kubectl apply -f self-signed-issuer.yaml --context $(K8S_CONTEXT)
 
 test:
 	kubectl wait --namespace $(NAMESPACE) --context $(K8S_CONTEXT) --for=condition=ready pod \
