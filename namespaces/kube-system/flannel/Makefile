@@ -1,4 +1,4 @@
-include ../../Makefile
+include ../../../Makefile
 
 NAME ?= flannel
 NAMESPACE = kube-system
@@ -8,18 +8,19 @@ current_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 
 export NAMESPACE
 
-upgrade:
+install:
 	@echo "Upgrading $(NAME)"
-	@for f in $(shell ls $(NAME)/*.yaml); do \
-		../../util/apply.sh $(current_dir)/$${f}; done
-	@touch ../../installed/calico
+	envsubst < 01_flannel.yaml | kubectl apply --context $(KUBE_CONTEXT) -f -
+	touch ../../../installed/flannel
 
 apply: upgrade
 
 uninstall:
 	@echo "Uninstalling $(NAME) from the $(NAMESPACE) namespace";
-	@for f in $(shell ls -r $(NAME)/*.yaml); do cat $${f} | kubectl delete -n $(NAMESPACE) \
+	envsubst < 01_flannel.yaml | kubectl delete --context $(KUBE_CONTEXT) \
 		--wait=false \
 		--ignore-not-found=true \
-		--context $(KUBE_CONTEXT) -f - || true; done
-	@rm -f ../../installed/$(NAME)
+		--context $(KUBE_CONTEXT) -f - || true
+	rm -f ../../../installed/$(NAME)
+
+destroy: uninstall

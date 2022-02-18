@@ -5,7 +5,7 @@ CLUSTER_NAME = pi-k8s
 CRI_SOCKET = unix:///run/containerd/containerd.sock
 LOG_LEVEL = 6
 K8S_SERVICE_CIDR = 10.250.0.0/16
-K8S_POD_NET_CIDR = 10.251.0.0/16 # 65,536 PODs
+K8S_POD_NET_CIDR = 10.251.0.0/16
 CALICO_BLOCKSIZE = 22 # 65 workers with 1024 PODs each
 # hostnames
 CONTROLLER0 = controller0
@@ -25,6 +25,7 @@ METALLB = $(this_dir)installed/metallb
 MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
 FLANNEL = $(this_dir)installed/flannel
+CALICO = $(this_dir)installed/calico
 TMP_CONFIG := $(shell mktemp /tmp/abc-script.XXXXXX)
 export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_CIDR CRI_SOCKET \
   KUBE_CONTEXT CALICO_BLOCKSIZE ALL_WORKERS ALL_CONTROLLERS CONTROLLER0 K8S_SERVICE_CIDR
@@ -43,6 +44,7 @@ $(INIT):
 	@echo "-------------------------------"
 	ssh $(CONTROLLER0) sudo systemctl restart containerd
 	ssh $(CONTROLLER0) sudo rm -rf /etc/kubernetes
+	ssh $(CONTROLLER0) sudo rm -rf /etc/calico
 	ssh $(CONTROLLER0) sudo mkdir /etc/kubernetes
 	envsubst < ./templates/kubeadm_init_config.yaml > $(TMP_CONFIG)
 	scp $(TMP_CONFIG) root@$(CONTROLLER0):/etc/kubernetes/kubeadm_config.yaml
@@ -66,6 +68,7 @@ $(INIT):
 		echo "---------------------------------------" ; \
 		ssh $$node sudo systemctl restart containerd ; \
 		ssh $$node sudo rm -rf /etc/kubernetes ; \
+		ssh $$node sudo rm -rf /etc/calico ; \
 		ssh $$node sudo mkdir /etc/kubernetes ; \
 		export ADVERTISE_IP=$$node ; \
 		envsubst < ./templates/kubeadm_controller_join_config.yaml > $(TMP_CONFIG) ; \
@@ -75,8 +78,6 @@ $(INIT):
 		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
 		  --v=$(LOG_LEVEL) \
 		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
-		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
-			label node $$node kubernetes.io/role=master ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
@@ -98,6 +99,11 @@ $(INIT):
 			label node $$node node-role.kubernetes.io/worker=worker ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
+			label node $(CONTROLLER1) kubernetes.io/role=master
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
+			label node $(CONTROLLER2) kubernetes.io/role=master
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create ns tests
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
 	touch $(INIT)
 
@@ -106,11 +112,11 @@ generate-kubeconfig:
 		sudo cp -f /etc/kubernetes/admin.conf \$HOME/.kube/config && \
 		sudo chown \$(id -u):\$(id -g) \$HOME/.kube/config"
 
-system-critical: initialize flannel metallb monitoring logging
+critical: initialize calico
 
-# ssh $$node sudo ipvsadm --clear ; \
+alltherest: metallb monitoring logging
 
-destroy:
+nuke:
 	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "-----------------------------" ; \
 		echo " DESTROYING K8S ON $$node" ; \
@@ -122,14 +128,18 @@ destroy:
 			--kubeconfig ~ubuntu/.kube/config ; \
 		ssh $$node sudo rm -rf /var/run/containerd ; \
 		ssh $$node sudo rm -rf /etc/cni/net.d ; \
+		ssh $$node sudo rm -rf /etc/calico ; \
 		ssh $$node sudo ipvsadm --clear ; \
 		ssh $$node sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps || true ; \
 		ssh $$node sudo iptables -F ; \
+		ssh $$node sudo ip link del cni0 ; \
+		scp vethcleanup.sh $$node:/tmp ; \
+		ssh $$node bash /tmp/vethcleanup.sh ; \
 	done
 	rm -f $(INIT)
 
 kubeconfig:
-	@ssh $(CONTROLLER0) sudo cat /etc/kubernetes/admin.conf
+	@ssh $(CONTROLLER0) sudo cat /etc/kubernetes/admin.conf | tee ~/.kube/config
 
 metallb: $(METALLB)
 

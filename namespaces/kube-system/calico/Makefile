@@ -22,7 +22,7 @@ $(CALICOCTL_ARM64):
 		echo "---------------------------------------" ; \
 		scp $(CALICOCTL_ARM64) root@$$node:/usr/local/bin/calicoctl ; \
 		ssh $$node sudo chmod a+x /usr/local/bin/calicoctl ; \
-		ssh $$node sudo mkdir /etc/calico ; \
+		ssh $$node sudo mkdir /etc/calico >/dev/null 2>&1 || true ; \
  		scp calicoctl.cfg root@$$node:/etc/calico/calicoctl.cfg ; \
         done
 
@@ -31,20 +31,6 @@ $(CALICO_CNI_ARM):
 
 $(CALICO_CNI_IPAM):
 	curl -L -o calico-ipam https://github.com/projectcalico/cni-plugin/releases/download/$(CNI_VERSION)/calico-ipam-arm64
-
-$(CNI): $(CALICO_CNI_ARM) $(CALICO_CNI_IPAM)
-	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
-		echo "---------------------------------------" ; \
-		echo " INSTALLING CNI plugin on $$node" ; \
-		echo "---------------------------------------" ; \
-		ssh $$node sudo mkdir -p /etc/cni/bin ; \
-		scp $(CALICO_CNI_ARM) root@$$node:/opt/cni/bin/calico ; \
-		scp $(CALICO_CNI_IPAM) root@$$node:/opt/cni/bin/calico-ipam ; \
-		ssh $$node sudo chmod 755 /opt/cni/bin/calico ; \
-		ssh $$node sudo chmod 755 /opt/cni/bin/calico-ipam ; \
-		ssh $$node sudo mkdir -p /etc/cni/net.d/ ; \
-        done
-	touch $(CNI)
 
 $(CALICOCTL):
 	curl -L https://github.com/projectcalico/calico/releases/download/$(CALICOCTL_VERSION)/calicoctl-linux-amd64 -o calicoctl
@@ -86,8 +72,12 @@ cnikubeconfig:
 		scp 10-calico.conflist root@$$node:/etc/cni/net.d/10-calico.conflist ; \
         done
 
+base:
+	kubectl apply --context $(KUBE_CONTEXT) -f 01_crds.yaml
+	envsubst < 02_ippool.yaml | ./calicoctl apply --context $(KUBE_CONTEXT) -f -
+
 roles:
-	kubectl apply -f 03_roles.yaml
+	kubectl apply --context $(KUBE_CONTEXT) -f 03_roles.yaml
 
 typha:
 	openssl req -x509 -newkey rsa:4096 \
@@ -96,8 +86,9 @@ typha:
                   -out typhaca.crt \
                   -subj "/CN=Calico Typha CA" \
                   -days 900
-	export TYPHACACRT=$$(cat typhaca.crt | sed "2,\$$s/^/    /g")
-	envsubst < 04_configmap.yaml | kubectl apply -f -
+	/usr/bin/cat typhaca.crt | sed "2,\$$s/^/    /g" > /tmp/cert.pem
+	TYPHACACRT=$$(cat /tmp/cert.pem) envsubst < 04_configmap.yaml | kubectl apply --context \
+		   $(KUBE_CONTEXT) -f -
 	openssl req -newkey rsa:4096 \
            -keyout typha.key \
            -nodes \
@@ -109,10 +100,10 @@ typha:
                   -CAcreateserial \
                   -out typha.crt \
                   -days 900
-	kubectl delete secret -n kube-system calico-typha-certs || true
+	kubectl delete secret -n kube-system calico-typha-certs --context $(KUBE_CONTEXT) || true
 	kubectl create secret generic -n kube-system calico-typha-certs --from-file=typha.key \
-		--from-file=typha.crt
-	envsubst < 05_typha.yaml | kubectl apply -f -
+		--from-file=typha.crt --context $(KUBE_CONTEXT)
+	envsubst < 05_typha.yaml | kubectl apply --context $(KUBE_CONTEXT) -f -
 
 node:
 	openssl req -newkey rsa:4096 \
@@ -126,28 +117,60 @@ node:
                   -CAcreateserial \
                   -out calico-node.crt \
                   -days 900
-	kubectl delete secret -n kube-system calico-node-certs || true
+	kubectl delete secret -n kube-system calico-node-certs --context $(KUBE_CONTEXT) || true
 	kubectl create secret generic -n kube-system calico-node-certs --from-file=calico-node.key \
-		--from-file=calico-node.crt
-	envsubst < 06_node.yaml | kubectl apply -f -
+		--from-file=calico-node.crt --context $(KUBE_CONTEXT)
+	envsubst < 06_node.yaml | kubectl apply --context $(KUBE_CONTEXT) -f -
 
 bgp:
 	for node in $(ALL_CONTROLLERS); do \
 		echo "---------------------------------------" ; \
 		echo " Labelling $$node as route-reflector" ; \
 		echo "---------------------------------------" ; \
-		kubectl label nodes $$node --overwrite=true is-route-reflector=true ; \
+		kubectl label nodes $$node --overwrite=true is-route-reflector=true --context $(KUBE_CONTEXT) ; \
 		./calicoctl patch node $$node --patch \
 		  '{"spec":{"bgp": {"routeReflectorClusterID": "224.0.0.1"}}}' --type json ; \
         done
-	envsubst < 07_bgp.yaml | ./calicoctl apply -f -
+	envsubst < 07_bgp.yaml | ./calicoctl apply --context $(KUBE_CONTEXT) -f -
 
-upgrade: $(CALICOCTL) $(CALICOCTL_ARM64)
-	@echo "Upgrading $(NAME)"
-	kubectl apply -f 01_crds.yaml
-	envsubst < 02_ippool.yaml | ./calicoctl apply -f -
+$(CNI): $(CALICOCTL_ARM64) $(CALICO_CNI_ARM) $(CALICO_CNI_IPAM)
+	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
+		echo "---------------------------------------" ; \
+		echo " INSTALLING CNI plugin on $$node" ; \
+		echo "---------------------------------------" ; \
+		ssh $$node sudo mkdir -p /etc/cni/bin ; \
+		scp $(CALICO_CNI_ARM) root@$$node:/opt/cni/bin/calico ; \
+		scp $(CALICO_CNI_IPAM) root@$$node:/opt/cni/bin/calico-ipam ; \
+		ssh $$node sudo chmod 755 /opt/cni/bin/calico ; \
+		ssh $$node sudo chmod 755 /opt/cni/bin/calico-ipam ; \
+		ssh $$node sudo mkdir -p /etc/cni/net.d/ ; \
+        done
+	touch $(CNI) ../../../installed/calico
 
-apply: upgrade
+install: $(CALICOCTL) base cnikubeconfig roles $(CNI) typha node bgp
+	@echo "$(NAME) Installed"
+
+destroy: uninstall
 
 uninstall:
 	@echo "Uninstalling $(NAME)";
+	ssh root@$(CONTROLLER0) rm -f cni.crt cni.csr cni.key cni.kubeconfig
+	kubectl delete secret -n kube-system calico-typha-certs --context $(KUBE_CONTEXT) || true
+	kubectl delete secret -n kube-system calico-node-certs --context $(KUBE_CONTEXT) || true
+	envsubst < 02_ippool.yaml | ./calicoctl delete --context $(KUBE_CONTEXT) -f - || true
+	envsubst < 07_bgp.yaml | ./calicoctl delete --context $(KUBE_CONTEXT) -f - || true
+	for f in 01_crds.yaml 03_roles.yaml 04_configmap.yaml 05_typha.yaml 06_node.yaml; do cat $${f} | \
+		kubectl delete \
+        	--wait=false \
+        	--ignore-not-found=true \
+        	--context $(KUBE_CONTEXT) -f - || true; done
+	rm -f calico-arm calicoctl calicoctl_arm64 calico-ipam calico-node.crt \
+		calico-node.csr calico-node.key cni typhaca.crt typhaca.key typhaca.srl \
+		typha.crt typha.csr typha.key
+	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
+		echo "Cleaning up /etc/cni/net.d on $${node}" ; \
+		ssh $$node sudo rm -f /etc/cni/net.d/10-calico.conflist /etc/cni/net.d/calico-kubeconfig ; \
+		ssh $$node sudo ip link del cni0 ; \
+		scp ../../../vethcleanup.sh $$node:/tmp ; \
+		ssh $$node bash /tmp/vethcleanup.sh ; \
+        done

@@ -7,3 +7,4 @@ calicoctl
 calicoctl_arm64
 calico-arm
 calico-ipam
+configmap.yaml

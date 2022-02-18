@@ -11,5 +11,6 @@
           - sysstat
           - etcd-client
           - nfs-common
+          - lm-sensors
         state: latest
         update_cache: true

@@ -10,6 +10,8 @@ $(MANIFEST):
 	@echo "Fecthing release $(RELEASE_TAG)"
 	@wget -q -O - "https://github.com/prometheus-operator/kube-prometheus/archive/refs/tags/$(RELEASE_TAG).tar.gz" | tar xz
 
+destroy: uninstall
+
 upgrade: $(MANIFEST)
 	@echo "Upgrading $(NAME)"
 	@kubectl apply -n $(NAMESPACE) --context $(KUBE_CONTEXT) -f $(MANIFEST)
