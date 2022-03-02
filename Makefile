@@ -105,6 +105,8 @@ $(INIT):
 			label node $(CONTROLLER2) kubernetes.io/role=master
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create ns tests
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
+	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes \
+		$(WORKER1) $(WORKER2) dedicated=lowMemory:NoSchedule
 	touch $(INIT)
 
 generate-kubeconfig:

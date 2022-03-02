@@ -2,6 +2,31 @@
 - hosts: all
   become: yes
   tasks:
+    - name: Install and lock kubeadm and utils
+      block:
+        - name: add google keyring
+          shell:
+            "sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 6A030B21BA07F4FB FEEA9169307EA071
+ 8B57C5C2836F4BEB"
+        - name: add kubernetes source
+          copy:
+            dest: /etc/apt/sources.list.d/kubernetes.list
+            content: deb http://apt.kubernetes.io/ kubernetes-xenial main
+        - name: apt update
+          shell:
+            "sudo apt update"
+        - name: install kubeadm pkgs
+          apt:
+            name:
+              - kubelet=1.23.1-00
+              - kubeadm=1.23.1-00
+              - kubectl=1.23.1-00
+              - kubernetes-cni=0.8.7-00
+            state: present
+            allow_downgrade: yes
+        - name: mark hold
+          shell:
+            "sudo apt-mark hold kubelet kubeadm kubectl"
     - name: install pre-reqs
       apt:
         name:
@@ -12,5 +37,55 @@
           - etcd-client
           - nfs-common
           - lm-sensors
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - net-tools
+          - jq
         state: latest
         update_cache: true
+    - name: Configure docker
+      block:
+        - name: Copy daemon.json
+          copy:
+            dest: /etc/docker/daemon.json
+            content: |
+              {
+              "exec-opts": ["native.cgroupdriver=systemd"],
+              "log-driver": "json-file",
+              "bridge": "none",
+              "storage-driver": "overlay2",
+              "log-opts": {
+              "max-size": "100m"
+              }
+              }
+        - name: Restart docker
+          ansible.builtin.service:
+            name: docker
+            state: restarted
+    - name: Configure kubelet
+      copy:
+        dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+        content: |
+          [Service]
+          Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+          Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+          EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+          EnvironmentFile=-/etc/default/kubelet
+          ExecStart=
+          ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+    - name: Configure containerd
+      block:
+        - name: Copy containerd.yaml
+          become: true
+          copy:
+            src: ./containerd.toml
+            dest: /etc/containerd/config.toml
+            owner: root
+            group: root
+            mode: 0644
+        - name: Restart containerd
+          ansible.builtin.service:
+            name: containerd
+            state: restarted

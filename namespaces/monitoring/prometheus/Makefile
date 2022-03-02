@@ -12,14 +12,12 @@ $(MANIFEST):
 
 destroy: uninstall
 
-upgrade: $(MANIFEST)
+install: $(MANIFEST)
 	@echo "Upgrading $(NAME)"
 	@kubectl apply -n $(NAMESPACE) --context $(KUBE_CONTEXT) -f $(MANIFEST)
 	@kubectl apply --server-side --context $(KUBE_CONTEXT) -f $(SRC_DIR)/manifests/setup
 	@until kubectl get servicemonitors --all-namespaces --context $(KUBE_CONTEXT) ; do date; sleep 1; echo ""; done
 	@kubectl apply --context $(KUBE_CONTEXT) -f $(SRC_DIR)/manifests/
-
-apply: upgrade
 
 uninstall:
 	@echo "Uninstalling $(NAME) from the $(NAMESPACE) namespace";

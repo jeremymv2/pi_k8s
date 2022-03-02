@@ -11,12 +11,10 @@ current_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 
 export RELEASE_TAG NAMESPACE FLUENT_ELASTICSEARCH_HOST FLUENT_ELASTICSEARCH_PORT EXTRA_OPTS
 
-upgrade:
+install:
 	@echo "Upgrading $(NAME)"
 	@for f in $(shell ls *yaml); do \
 		../../../util/apply.sh $(current_dir)/$${f}; done
-
-apply: upgrade
 
 uninstall:
 	@echo "Uninstalling $(NAME) from the $(NAMESPACE) namespace";
