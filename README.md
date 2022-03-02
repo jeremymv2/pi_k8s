@@ -14,6 +14,12 @@ Bare metal kubernetes cluster on Raspberry PIs
 | Pi4-4 | worker1 | Pi 4 Model B Rev 1.4 | 4GB |
 | Pi4-5 | worker2 | Pi 4 Model B Rev 1.4 | 4GB |
 
+## Pre-reqs
+
+```bash
+make ansible
+```
+
 ## Installation
 
 ```bash
