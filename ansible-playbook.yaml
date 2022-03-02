@@ -2,49 +2,41 @@
 - hosts: all
   become: yes
   tasks:
-    - name: Install and lock kubeadm and utils
+    - name: Install kubeadm utils and cri
       block:
-        - name: add google keyring
+        - name: add keyrings
           shell:
             "sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 6A030B21BA07F4FB FEEA9169307EA071
- 8B57C5C2836F4BEB"
-        - name: add kubernetes source
+ 8B57C5C2836F4BEB 4D64390375060AA4 || true"
+        - name: add kubernetes sources
           copy:
             dest: /etc/apt/sources.list.d/kubernetes.list
             content: deb http://apt.kubernetes.io/ kubernetes-xenial main
+        - name: add libcontainers
+          copy:
+            dest: /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+            content: deb [trusted=yes] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_21.04/ /
+        - name: add libcontainers cri-o
+          copy:
+            dest: /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:1.23.1.list
+            content: deb [trusted=yes] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.23:/1.23.1/xUbuntu_21.04/ /
         - name: apt update
           shell:
             "sudo apt update"
-        - name: install kubeadm pkgs
+        - name: install kube pkgs
           apt:
             name:
               - kubelet=1.23.1-00
               - kubeadm=1.23.1-00
               - kubectl=1.23.1-00
+              - cri-o=1.23.1~0
+              - cri-o-runc=1.0.1~0
               - kubernetes-cni=0.8.7-00
             state: present
             allow_downgrade: yes
         - name: mark hold
           shell:
-            "sudo apt-mark hold kubelet kubeadm kubectl"
-    - name: install pre-reqs
-      apt:
-        name:
-          - ntp
-          - docker.io
-          - containerd
-          - sysstat
-          - etcd-client
-          - nfs-common
-          - lm-sensors
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - software-properties-common
-          - net-tools
-          - jq
-        state: latest
-        update_cache: true
+            "sudo apt-mark hold kubelet kubeadm kubectl cri-o cri-o-runc"
     - name: Configure docker
       block:
         - name: Copy daemon.json
@@ -64,6 +56,25 @@
           ansible.builtin.service:
             name: docker
             state: restarted
+    - name: install pre-reqs
+      apt:
+        name:
+          - ntp
+          - docker.io
+          - containerd
+          - sysstat
+          - etcd-client
+          - nfs-common
+          - lm-sensors
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - net-tools
+          - jq
+          - ipvsadm
+        state: latest
+        update_cache: true
     - name: Configure kubelet
       copy:
         dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
@@ -80,7 +91,7 @@
         - name: Copy containerd.yaml
           become: true
           copy:
-            src: ./containerd.toml
+            src: ./files/containerd.toml
             dest: /etc/containerd/config.toml
             owner: root
             group: root
@@ -89,3 +100,8 @@
           ansible.builtin.service:
             name: containerd
             state: restarted
+    - name: enable cri-o service
+      ansible.builtin.service:
+        name: crio
+        state: started
+        enabled: true

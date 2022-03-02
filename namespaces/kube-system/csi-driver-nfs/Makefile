@@ -19,8 +19,9 @@ destroy:
 	@echo "Deleting chart $(RELEASE_NAME) yaml with version $(VERSION) from $(CHART_REPO)/$(CHART_NAME) into namespace $(NAMESPACE)"
 	kubectl delete -n $(NAMESPACE) -f 01_$(RELEASE_NAME).yaml --context $(KUBE_CONTEXT)
 	envsubst < 02_nfs-auto-provisioner.yaml | kubectl delete --context $(KUBE_CONTEXT) -n $(NAMESPACE) -f -
+	rm -f ../../../installed/nfs_storage
 
-install: setup
+apply: setup
 	@echo "Installing chart $(RELEASE_NAME) yaml with version $(VERSION) from $(CHART_REPO)/$(CHART_NAME) \
 		into namespace $(NAMESPACE)"
 	helm template -n $(NAMESPACE) $(RELEASE_NAME) $(CHART_REPO)/$(CHART_NAME) \
@@ -28,6 +29,7 @@ install: setup
 		--values values.yaml > 01_$(RELEASE_NAME).yaml
 	kubectl apply -n $(NAMESPACE) -f 01_$(RELEASE_NAME).yaml --context $(KUBE_CONTEXT)
 	envsubst < 02_nfs-auto-provisioner.yaml | kubectl apply --context $(KUBE_CONTEXT) -n $(NAMESPACE) -f -
+	touch ../../../installed/nfs_storage
 
 tests:
 	kubectl apply -f test-pvc.yaml --context $(KUBE_CONTEXT)

@@ -26,17 +26,16 @@ MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
 FLANNEL = $(this_dir)installed/flannel
 CALICO = $(this_dir)installed/calico
+NFS_CSI = $(this_dir)installed/nfs_storage
+CNI_IN_USE = calico
+CSI_IN_USE = nfs_storage
 TMP_CONFIG := $(shell mktemp /tmp/abc-script.XXXXXX)
+
 export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_CIDR CRI_SOCKET \
   KUBE_CONTEXT CALICO_BLOCKSIZE ALL_WORKERS ALL_CONTROLLERS CONTROLLER0 K8S_SERVICE_CIDR
 
-# save for later
-#ssh $$node sudo $$(ssh $(CONTROLLER0) sudo kubeadm token create \
-
 ansible:
 	ansible-playbook ansible-playbook.yaml
-
-initialize: $(INIT)
 
 $(INIT):
 	@echo "-------------------------------"
@@ -75,6 +74,7 @@ $(INIT):
 		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
 		ssh $$node sudo systemctl restart containerd ; \
 		scp -r root@$(CONTROLLER0):/etc/kubernetes/pki root@$$node:/etc/kubernetes/ ; \
+		scp root@$(CONTROLLER0):/etc/kubernetes/admin.conf root@$$node:/etc/kubernetes/ ; \
 		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
 		  --v=$(LOG_LEVEL) \
 		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
@@ -91,6 +91,7 @@ $(INIT):
 		ssh $$node sudo mkdir /etc/kubernetes ; \
 		envsubst < ./templates/kubeadm_worker_join_config.yaml > $(TMP_CONFIG) ; \
 		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
+		scp root@$(CONTROLLER0):/etc/kubernetes/admin.conf root@$$node:/etc/kubernetes/ ; \
 		ssh $$node sudo systemctl restart containerd ; \
 		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
 		  --v=$(LOG_LEVEL) \
@@ -105,8 +106,6 @@ $(INIT):
 			label node $(CONTROLLER2) kubernetes.io/role=master
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create ns tests
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
-	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes \
-		$(WORKER1) $(WORKER2) dedicated=lowMemory:NoSchedule
 	touch $(INIT)
 
 generate-kubeconfig:
@@ -114,65 +113,92 @@ generate-kubeconfig:
 		sudo cp -f /etc/kubernetes/admin.conf \$HOME/.kube/config && \
 		sudo chown \$(id -u):\$(id -g) \$HOME/.kube/config"
 
-critical: initialize calico
+install_cni: $(CNI_IN_USE)
 
-alltherest: metallb monitoring logging
+install_csi: $(CSI_IN_USE)
+
+install: $(INIT)
+	$(MAKE) kubeconfig
+	$(MAKE) install_cni
+	$(MAKE) install_csi
+
+uninstall_cni: uninstall_$(CNI_IN_USE)
+
+uninstall_csi: uninstall_$(CSI_IN_USE)
 
 nuke:
+	$(MAKE) uninstall_cni
+	$(MAKE) uninstall_csi
 	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "-----------------------------" ; \
 		echo " DESTROYING K8S ON $$node" ; \
 		echo "-----------------------------" ; \
-		ssh $$node sudo kubeadm reset \
-			--cri-socket=unix:///run/containerd/containerd.sock \
-			--force \
-			--v=5 \
-			--kubeconfig ~ubuntu/.kube/config ; \
-		ssh $$node sudo rm -rf /var/run/containerd ; \
-		ssh $$node sudo rm -rf /etc/cni/net.d ; \
-		ssh $$node sudo rm -rf /etc/calico ; \
-		ssh $$node sudo ipvsadm --clear ; \
-		ssh $$node sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps || true ; \
-		ssh $$node sudo iptables -F ; \
-		ssh $$node sudo ip link del cni0 ; \
-		scp vethcleanup.sh $$node:/tmp ; \
-		ssh $$node bash /tmp/vethcleanup.sh ; \
+		scp files/cleanup.sh root@$$node:/tmp ; \
+		ssh root@$$node chmod a+x /tmp/cleanup.sh ; \
+		ssh root@$$node /tmp/cleanup.sh all ; \
 	done
+	rm -f installed/*
 	rm -f $(INIT)
 
 kubeconfig:
 	@ssh $(CONTROLLER0) sudo cat /etc/kubernetes/admin.conf | tee ~/.kube/config
 
+$(CALICO):
+	pushd namespaces/kube-system/calico && \
+		$(MAKE) apply && popd
+	touch $(CALICO)
+
+calico: $(CALICO)
+
+uninstall_calico:
+	pushd namespaces/kube-system/calico && \
+		$(MAKE) uninstall && popd
+	rm -f $(CALICO)
+
+$(NFS_CSI):
+	pushd namespaces/kube-system/csi-driver-nfs && \
+		$(MAKE) apply && popd
+	touch $(NFS_CSI)
+
+nfs_storage: $(NFS_CSI)
+
+uninstall_nfs_storage:
+	pushd namespaces/kube-system/csi-driver-nfs && \
+		$(MAKE) destroy && popd
+	rm -f $(NFS_CSI)
+
 metallb: $(METALLB)
 
-metallb-uninstall:
-	@pushd namespaces/metallb-system && \
+uninstall_metallb:
+	pushd namespaces/metallb-system && \
 		$(MAKE) uninstall && popd
+	rm -f $(METALLB)
 
 $(METALLB):
-	@pushd namespaces/metallb-system && \
+	pushd namespaces/metallb-system && \
 		$(MAKE) apply && popd
-	@touch $(METALLB)
+	touch $(METALLB)
 
 monitoring: $(MONITORING)
 
-monitoring-uninstall:
-	@pushd namespaces/monitoring/prometheus && \
+uninstall_monitoring:
+	pushd namespaces/monitoring/prometheus && \
 		$(MAKE) uninstall && popd
 
 $(MONITORING):
-	@pushd namespaces/monitoring/prometheus && \
+	pushd namespaces/monitoring/prometheus && \
 		$(MAKE) apply && popd
-	@touch $(MONITORING)
+	touch $(MONITORING)
 
 logging: $(LOGGING)
 
-logging-uninstall:
-	@pushd namespaces/logging/fluent-bit && \
+uninstall_logging:
+	pushd namespaces/logging/fluent-bit && \
 		$(MAKE) uninstall && popd
 
 $(LOGGING):
-	@pushd namespaces/logging/fluent-bit && \
+	pushd namespaces/logging/fluent-bit && \
 		$(MAKE) apply && popd
-	@touch $(LOGGING)
+	touch $(LOGGING)
 
+alltherest: metallb monitoring logging

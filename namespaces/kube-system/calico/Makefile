@@ -134,6 +134,7 @@ bgp:
 	envsubst < 07_bgp.yaml | ./calicoctl apply --context $(KUBE_CONTEXT) -f -
 
 $(CNI): $(CALICOCTL_ARM64) $(CALICO_CNI_ARM) $(CALICO_CNI_IPAM)
+	@echo "Installing CNI on nodes"
 	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "---------------------------------------" ; \
 		echo " INSTALLING CNI plugin on $$node" ; \
@@ -145,10 +146,11 @@ $(CNI): $(CALICOCTL_ARM64) $(CALICO_CNI_ARM) $(CALICO_CNI_IPAM)
 		ssh $$node sudo chmod 755 /opt/cni/bin/calico-ipam ; \
 		ssh $$node sudo mkdir -p /etc/cni/net.d/ ; \
         done
-	touch $(CNI) ../../../installed/calico
+	touch $(CNI)
 
-install: $(CALICOCTL) base cnikubeconfig roles $(CNI) typha node bgp
-	@echo "$(NAME) Installed"
+apply: $(CALICOCTL) base cnikubeconfig roles $(CNI) typha node bgp
+	@echo "$(NAME) Installed!"
+	touch ../../../installed/calico
 
 destroy: uninstall
 
@@ -169,8 +171,8 @@ uninstall:
 		typha.crt typha.csr typha.key
 	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "Cleaning up /etc/cni/net.d on $${node}" ; \
-		ssh $$node sudo rm -f /etc/cni/net.d/10-calico.conflist /etc/cni/net.d/calico-kubeconfig ; \
-		ssh $$node sudo ip link del cni0 ; \
-		scp ../../../vethcleanup.sh $$node:/tmp ; \
-		ssh $$node bash /tmp/vethcleanup.sh ; \
+		scp ../../../files/cleanup.sh root@$$node:/tmp ; \
+		ssh root@$$node chmod a+x /tmp/cleanup.sh ; \
+		ssh root@$$node /tmp/cleanup.sh cni ; \
         done
+	rm -f ../../../installed/calico
