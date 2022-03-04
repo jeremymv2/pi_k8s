@@ -465,7 +465,7 @@ controller:
 
     ## Set external traffic policy to: "Local" to preserve source IP on providers supporting it.
     ## Ref: https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-typeloadbalancer
-    # externalTrafficPolicy: ""
+    externalTrafficPolicy: "Local"
 
     ## Must be either "None" or "ClientIP" if set. Kubernetes will default to "None".
     ## Ref: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies
@@ -496,9 +496,9 @@ controller:
       http: http
       https: https
 
-    #type: LoadBalancer
-    type: ClusterIP
-    clusterIP: 10.250.87.252 
+    type: LoadBalancer
+      #type: ClusterIP
+      #clusterIP: 10.250.87.252
 
     ## type: NodePort
     ## nodePorts:

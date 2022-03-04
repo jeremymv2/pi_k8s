@@ -1,5 +1,6 @@
+include ../../Makefile
+
 CHART_VERSION := 4.0.17
-K8S_CONTEXT := kubernetes-admin@pi-k8s
 CHART_NAME := ingress-nginx
 NAMESPACE  := $(CHART_NAME)
 CHART_REPO := $(CHART_NAME)
@@ -13,21 +14,23 @@ setup: $(CMCTL)
 
 destroy:
 	@echo "Deleting release $(RELEASE_NAME) from $(NAMESPACE)"
-	kubectl -n $(NAMESPACE) delete -f $(RELEASE_NAME).yaml --context $(K8S_CONTEXT) || true
-	kubectl delete namespace $(NAMESPACE) --context $(K8S_CONTEXT) || true
+	kubectl -n $(NAMESPACE) delete -f $(RELEASE_NAME).yaml --context $(KUBE_CONTEXT) || true
+	kubectl delete namespace $(NAMESPACE) --context $(KUBE_CONTEXT) || true
+	rm -f ../../installed/ingress_nginx
 
-install: setup
+apply: setup
 	@echo "Installing release $(RELEASE_NAME) into namespace $(NAMESPACE)"
 	helm template $(CHART_NAME) $(CHART_REPO)/$(CHART_NAME) \
 		--namespace $(NAMESPACE) \
-		--kube-context $(K8S_CONTEXT) \
+		--kube-context $(KUBE_CONTEXT) \
 		--version $(CHART_VERSION) \
 		--values default_values.yaml > $(RELEASE_NAME).yaml
-	kubectl create ns $(NAMESPACE) --context $(K8S_CONTEXT) || true
-	kubectl -n $(NAMESPACE) apply -f $(RELEASE_NAME).yaml --context $(K8S_CONTEXT)
+	kubectl create ns $(NAMESPACE) --context $(KUBE_CONTEXT) || true
+	kubectl -n $(NAMESPACE) apply -f $(RELEASE_NAME).yaml --context $(KUBE_CONTEXT)
+	touch ../../installed/ingress_nginx
 
 test:
-	kubectl create ns tests --context $(K8S_CONTEXT) || true
-	kubectl -n tests apply -f test.yaml --context $(K8S_CONTEXT)
+	kubectl create ns tests --context $(KUBE_CONTEXT) || true
+	kubectl -n tests apply -f ./test-simple-tls-svc.yaml --context $(KUBE_CONTEXT)
 	sleep 10
 	curl -s demo.k8s.ethzero.cloud | grep -q "It works"

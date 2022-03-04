@@ -49,37 +49,37 @@ metadata:
   name: demo
   namespace: tests
 spec:
+  clusterIP: 10.250.107.241
+  clusterIPs:
+  - 10.250.107.241
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
   selector:
     app: demo
-  ports:
-    - name: http
-      protocol: TCP
-      port: 80
-      targetPort: 80
-    - name: https
-      protocol: TCP
-      port: 443
-      targetPort: 80
-  type: LoadBalancer
   sessionAffinity: None
+  type: ClusterIP
 status:
   loadBalancer: {}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  labels:
-    app: demo
   name: demo
   namespace: tests
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-production"
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - demo.k8s.ethzero.cloud
-    secretName: demo
+    secretName: demo-tls
   rules:
   - host: demo.k8s.ethzero.cloud
     http:
@@ -92,4 +92,6 @@ spec:
         path: /
         pathType: Exact
 status:
-  loadBalancer: {}
+  loadBalancer:
+    ingress:
+    - ip: 10.250.87.252

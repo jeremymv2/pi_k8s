@@ -11,15 +11,16 @@ current_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 
 export RELEASE_TAG NAMESPACE FLUENT_ELASTICSEARCH_HOST FLUENT_ELASTICSEARCH_PORT EXTRA_OPTS
 
-install:
+apply:
 	@echo "Upgrading $(NAME)"
-	@for f in $(shell ls *yaml); do \
+	for f in $(shell ls *yaml); do \
 		../../../util/apply.sh $(current_dir)/$${f}; done
+	touch ../../../installed/fluentbit
 
-uninstall:
+destroy:
 	@echo "Uninstalling $(NAME) from the $(NAMESPACE) namespace";
-	@for f in $(shell ls -r *yaml); do cat $${f} | kubectl delete -n $(NAMESPACE) \
+	for f in $(shell ls -r *yaml); do cat $${f} | kubectl delete -n $(NAMESPACE) \
 		--wait=false \
 		--ignore-not-found=true \
 		--context $(KUBE_CONTEXT) -f - || true; done
-	@rm -f ../../../installed/fluentbit
+	rm -f ../../../installed/fluentbit

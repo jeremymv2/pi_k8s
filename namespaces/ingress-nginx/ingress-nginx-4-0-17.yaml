@@ -272,8 +272,8 @@ metadata:
   name: ingress-nginx-controller
   namespace: ingress-nginx
 spec:
-  type: ClusterIP
-  clusterIP: 10.250.87.252
+  type: LoadBalancer
+  externalTrafficPolicy: Local
   ipFamilyPolicy: SingleStack
   ipFamilies: 
     - IPv4

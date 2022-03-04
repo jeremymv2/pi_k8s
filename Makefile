@@ -19,16 +19,22 @@ CONTROLLER2_ADVERTISE_IP = 172.16.0.103
 ALL_WORKERS = $(WORKER2) $(WORKER1) $(WORKER0)
 ALL_CONTROLLERS = $(CONTROLLER2) $(CONTROLLER1) $(CONTROLLER0)
 this_path := $(abspath $(firstword $(MAKEFILE_LIST)))
+## components
 this_dir := $(abspath $(patsubst %/,%,$(dir $(mkfile_path))))
 INIT = $(this_dir)installed/init
+CALICO = $(this_dir)installed/calico
+NFS_CSI = $(this_dir)installed/nfs_storage
+INGRESS_NGNIX = $(this_dir)installed/ingress_nginx
 METALLB = $(this_dir)installed/metallb
+CERTMANAGER = $(this_dir)installed/certmanager
 MONITORING = $(this_dir)installed/prometheus
 LOGGING = $(this_dir)installed/fluentbit
 FLANNEL = $(this_dir)installed/flannel
-CALICO = $(this_dir)installed/calico
-NFS_CSI = $(this_dir)installed/nfs_storage
+## end components
 CNI_IN_USE = calico
 CSI_IN_USE = nfs_storage
+LB_IN_USE  = metallb
+INGRESS_IN_USE = ingress_nginx
 TMP_CONFIG := $(shell mktemp /tmp/abc-script.XXXXXX)
 
 export K8S_VERSION CONTROL_PLANE_API CLUSTER_NAME K8S_SERVICE_CIDR K8S_POD_NET_CIDR CRI_SOCKET \
@@ -44,7 +50,7 @@ $(INIT):
 	ssh $(CONTROLLER0) sudo systemctl restart containerd
 	ssh $(CONTROLLER0) sudo rm -rf /etc/kubernetes
 	ssh $(CONTROLLER0) sudo rm -rf /etc/calico
-	ssh $(CONTROLLER0) sudo mkdir /etc/kubernetes
+	ssh $(CONTROLLER0) sudo mkdir -p /etc/kubernetes/manifests
 	envsubst < ./templates/kubeadm_init_config.yaml > $(TMP_CONFIG)
 	scp $(TMP_CONFIG) root@$(CONTROLLER0):/etc/kubernetes/kubeadm_config.yaml
 	ssh $(CONTROLLER0) sudo kubeadm init phase certs all \
@@ -117,14 +123,24 @@ install_cni: $(CNI_IN_USE)
 
 install_csi: $(CSI_IN_USE)
 
+install_lb: $(LB_IN_USE)
+
+install_ingress: $(INGRESS_IN_USE)
+
 install: $(INIT)
 	$(MAKE) kubeconfig
 	$(MAKE) install_cni
 	$(MAKE) install_csi
+	$(MAKE) install_lb
+	$(MAKE) install_ingress
 
 uninstall_cni: uninstall_$(CNI_IN_USE)
 
 uninstall_csi: uninstall_$(CSI_IN_USE)
+
+uninstall_lb: uninstall_$(LB_IN_USE)
+
+uninstall_ingress: uninstall_$(INGRESS_IN_USE)
 
 nuke:
 	$(MAKE) uninstall_cni
@@ -146,59 +162,74 @@ kubeconfig:
 $(CALICO):
 	pushd namespaces/kube-system/calico && \
 		$(MAKE) apply && popd
-	touch $(CALICO)
 
 calico: $(CALICO)
 
 uninstall_calico:
 	pushd namespaces/kube-system/calico && \
 		$(MAKE) uninstall && popd
-	rm -f $(CALICO)
 
 $(NFS_CSI):
 	pushd namespaces/kube-system/csi-driver-nfs && \
 		$(MAKE) apply && popd
-	touch $(NFS_CSI)
 
 nfs_storage: $(NFS_CSI)
 
 uninstall_nfs_storage:
 	pushd namespaces/kube-system/csi-driver-nfs && \
 		$(MAKE) destroy && popd
-	rm -f $(NFS_CSI)
+
+$(INGRESS_NGNIX):
+	pushd namespaces/ingress-nginx && \
+		$(MAKE) apply && popd
+
+ingress_nginx: $(INGRESS_NGNIX)
+
+uninstall_ingress_nginx:
+	pushd namespaces/ingress-nginx && \
+		$(MAKE) destroy && popd
 
 metallb: $(METALLB)
 
 uninstall_metallb:
 	pushd namespaces/metallb-system && \
 		$(MAKE) uninstall && popd
-	rm -f $(METALLB)
 
 $(METALLB):
 	pushd namespaces/metallb-system && \
 		$(MAKE) apply && popd
-	touch $(METALLB)
 
 monitoring: $(MONITORING)
 
 uninstall_monitoring:
 	pushd namespaces/monitoring/prometheus && \
-		$(MAKE) uninstall && popd
+		$(MAKE) destroy && popd
 
 $(MONITORING):
 	pushd namespaces/monitoring/prometheus && \
 		$(MAKE) apply && popd
-	touch $(MONITORING)
 
 logging: $(LOGGING)
 
 uninstall_logging:
 	pushd namespaces/logging/fluent-bit && \
-		$(MAKE) uninstall && popd
+		$(MAKE) destroy && popd
 
 $(LOGGING):
 	pushd namespaces/logging/fluent-bit && \
 		$(MAKE) apply && popd
-	touch $(LOGGING)
 
-alltherest: metallb monitoring logging
+certmanager: $(CERTMANAGER)
+
+uninstall_certmanager:
+	pushd namespaces/cert-manager && \
+		$(MAKE) destroy && popd
+
+$(CERTMANAGER):
+	pushd namespaces/cert-manager && \
+		$(MAKE) apply && popd
+
+alltherest: monitoring logging certmanager
+
+elastic:
+	docker-compose up
