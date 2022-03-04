@@ -26,11 +26,13 @@ apply: setup
 		--version $(CHART_VERSION) \
 		--values default_values.yaml > $(RELEASE_NAME).yaml
 	kubectl create ns $(NAMESPACE) --context $(KUBE_CONTEXT) || true
+	kubectl -n $(NAMESPACE) apply -f default-ingress-cert.yaml
 	kubectl -n $(NAMESPACE) apply -f $(RELEASE_NAME).yaml --context $(KUBE_CONTEXT)
 	touch ../../installed/ingress_nginx
 
 test:
 	kubectl create ns tests --context $(KUBE_CONTEXT) || true
-	kubectl -n tests apply -f ./test-simple-tls-svc.yaml --context $(KUBE_CONTEXT)
+	kubectl -n tests delete -f ./test.yaml --context $(KUBE_CONTEXT) || true
+	kubectl -n tests apply -f ./test.yaml --context $(KUBE_CONTEXT)
 	sleep 10
 	curl -s demo.k8s.ethzero.cloud | grep -q "It works"

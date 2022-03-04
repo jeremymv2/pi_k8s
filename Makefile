@@ -132,6 +132,7 @@ install: $(INIT)
 	$(MAKE) install_cni
 	$(MAKE) install_csi
 	$(MAKE) install_lb
+	$(MAKE) certmanager
 	$(MAKE) install_ingress
 
 uninstall_cni: uninstall_$(CNI_IN_USE)
@@ -229,7 +230,7 @@ $(CERTMANAGER):
 	pushd namespaces/cert-manager && \
 		$(MAKE) apply && popd
 
-alltherest: monitoring logging certmanager
+alltherest: monitoring logging
 
 elastic:
 	docker-compose up
