@@ -6,7 +6,8 @@ CRI_SOCKET = unix:///run/containerd/containerd.sock
 LOG_LEVEL = 6
 K8S_SERVICE_CIDR = 10.250.0.0/16
 K8S_POD_NET_CIDR = 10.251.0.0/16
-CALICO_BLOCKSIZE = 22 # 65 workers with 1024 PODs each
+# 65 workers with 1024 PODs each
+CALICO_BLOCKSIZE = 22
 # hostnames
 CONTROLLER0 = controller0
 CONTROLLER1 = controller1
@@ -50,7 +51,8 @@ $(INIT):
 	ssh $(CONTROLLER0) sudo systemctl restart containerd
 	ssh $(CONTROLLER0) sudo rm -rf /etc/kubernetes
 	ssh $(CONTROLLER0) sudo rm -rf /etc/calico
-	ssh $(CONTROLLER0) sudo mkdir -p /etc/kubernetes/manifests
+	ssh $(CONTROLLER0) sudo rm -rf /etc/cni/net.d/100-crio-bridge.conf
+	ssh $(CONTROLLER0) sudo mkdir -p /etc/kubernetes/manifests /etc/calico
 	envsubst < ./templates/kubeadm_init_config.yaml > $(TMP_CONFIG)
 	scp $(TMP_CONFIG) root@$(CONTROLLER0):/etc/kubernetes/kubeadm_config.yaml
 	ssh $(CONTROLLER0) sudo kubeadm init phase certs all \
@@ -67,6 +69,7 @@ $(INIT):
 		done"
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf \
 		label node $(CONTROLLER0) kubernetes.io/role=master
+	ssh $(CONTROLLER0) sudo mkdir -p /etc/kubernetes/manifests
 	for node in $(CONTROLLER1_ADVERTISE_IP) $(CONTROLLER2_ADVERTISE_IP); do \
 		echo "---------------------------------------" ; \
 		echo " JOINING $$node TO CONTROL PLANE" ; \
@@ -74,7 +77,8 @@ $(INIT):
 		ssh $$node sudo systemctl restart containerd ; \
 		ssh $$node sudo rm -rf /etc/kubernetes ; \
 		ssh $$node sudo rm -rf /etc/calico ; \
-		ssh $$node sudo mkdir /etc/kubernetes ; \
+		ssh $$node sudo rm -rf /etc/cni/net.d/100-crio-bridge.conf ; \
+		ssh $$node sudo mkdir -p /etc/kubernetes/manifests /etc/calico ; \
 		export ADVERTISE_IP=$$node ; \
 		envsubst < ./templates/kubeadm_controller_join_config.yaml > $(TMP_CONFIG) ; \
 		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
@@ -82,8 +86,8 @@ $(INIT):
 		scp -r root@$(CONTROLLER0):/etc/kubernetes/pki root@$$node:/etc/kubernetes/ ; \
 		scp root@$(CONTROLLER0):/etc/kubernetes/admin.conf root@$$node:/etc/kubernetes/ ; \
 		ssh $$node sudo kubeadm join $(CONTROLLER0):6443 \
-		  --v=$(LOG_LEVEL) \
-		  --config=/etc/kubernetes/kubeadm_config.yaml ; \
+			--v=$(LOG_LEVEL) \
+			--config=/etc/kubernetes/kubeadm_config.yaml ; \
 		ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide ; \
 	done
 	ssh $(CONTROLLER0) sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide
@@ -94,7 +98,9 @@ $(INIT):
 		echo "---------------------------------------" ; \
 		ssh $$node sudo systemctl restart containerd ; \
 		ssh $$node sudo rm -rf /etc/kubernetes ; \
-		ssh $$node sudo mkdir /etc/kubernetes ; \
+		ssh $$node sudo rm -rf /etc/calico ; \
+		ssh $$node sudo rm -rf /etc/cni/net.d/100-crio-bridge.conf ; \
+		ssh $$node sudo mkdir -p /etc/kubernetes/manifests /etc/calico; \
 		envsubst < ./templates/kubeadm_worker_join_config.yaml > $(TMP_CONFIG) ; \
 		scp $(TMP_CONFIG) root@$$node:/etc/kubernetes/kubeadm_config.yaml ; \
 		scp root@$(CONTROLLER0):/etc/kubernetes/admin.conf root@$$node:/etc/kubernetes/ ; \
@@ -127,13 +133,19 @@ install_lb: $(LB_IN_USE)
 
 install_ingress: $(INGRESS_IN_USE)
 
-install: $(INIT)
+install_basic: $(INIT)
 	$(MAKE) kubeconfig
 	$(MAKE) install_cni
+
+install_all:
+	$(MAKE) install_basic
 	$(MAKE) install_csi
 	$(MAKE) install_lb
 	$(MAKE) certmanager
 	$(MAKE) install_ingress
+
+install:
+	$(MAKE) install_all
 
 uninstall_cni: uninstall_$(CNI_IN_USE)
 
@@ -145,7 +157,6 @@ uninstall_ingress: uninstall_$(INGRESS_IN_USE)
 
 nuke:
 	$(MAKE) uninstall_cni
-	$(MAKE) uninstall_csi
 	for node in $(ALL_WORKERS) $(ALL_CONTROLLERS); do \
 		echo "-----------------------------" ; \
 		echo " DESTROYING K8S ON $$node" ; \

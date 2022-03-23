@@ -37,6 +37,12 @@
         - name: mark hold
           shell:
             "sudo apt-mark hold kubelet kubeadm kubectl cri-o cri-o-runc"
+    - name: Install docker
+      apt:
+        name:
+          - docker.io
+        state: latest
+        update_cache: true
     - name: Configure docker
       block:
         - name: Copy daemon.json
@@ -88,6 +94,9 @@
           ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
     - name: Configure containerd
       block:
+        - name: mkdir /etc/containerd
+          shell:
+            "sudo mkdir /etc/containerd"
         - name: Copy containerd.yaml
           become: true
           copy:

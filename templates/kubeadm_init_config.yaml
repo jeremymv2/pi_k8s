@@ -45,6 +45,7 @@ etcd:
       - "pi4-2"
       - "pi4-3"
 networking:
+  dnsDomain: cluster.local
   serviceSubnet: ${K8S_SERVICE_CIDR}
   podSubnet: ${K8S_POD_NET_CIDR}
 ---
